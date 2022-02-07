@@ -6,3 +6,5 @@ publish = false
 
 [dependencies]
 axum = {path = "../axum"}
+okapi = "0.7.0-rc.1"
+tower-service = "0.3"
