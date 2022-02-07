@@ -1,4 +1,5 @@
 use crate::with_operation::WithOperation;
+use crate::with_path_item::WithPathItem;
 use axum::body::{Body, Bytes, HttpBody};
 use axum::handler::Handler;
 use axum::http::Request;
@@ -6,7 +7,7 @@ use axum::response::Response;
 use axum::routing::future::RouteFuture;
 use axum::routing::MethodFilter;
 use axum::BoxError;
-use okapi::openapi3::Operation;
+use okapi::openapi3::{Operation, PathItem};
 use std::convert::Infallible;
 use std::task::{Context, Poll};
 use tower_service::Service;
@@ -15,6 +16,14 @@ use tower_service::Service;
 pub struct MethodRouter<B = Body, E = Infallible> {
     method_router: axum::routing::MethodRouter<B, E>,
     method_operations: MethodOperations,
+}
+
+impl<B, E> WithPathItem for MethodRouter<B, E> {
+    type Type = axum::routing::MethodRouter<B, E>;
+
+    fn split(self) -> (Self::Type, PathItem) {
+        (self.method_router, self.method_operations.into())
+    }
 }
 
 #[derive(Default, Clone, Debug)]
@@ -27,6 +36,33 @@ struct MethodOperations {
     post: Option<Operation>,
     put: Option<Operation>,
     trace: Option<Operation>,
+}
+
+impl From<MethodOperations> for PathItem {
+    fn from(method_operations: MethodOperations) -> Self {
+        let MethodOperations {
+            get,
+            head,
+            delete,
+            options,
+            patch,
+            post,
+            put,
+            trace,
+        } = method_operations;
+
+        Self {
+            get,
+            put,
+            post,
+            delete,
+            options,
+            head,
+            patch,
+            trace,
+            ..Default::default()
+        }
+    }
 }
 
 impl<B, E> Default for MethodRouter<B, E>
