@@ -1,11 +1,12 @@
 use crate::with_path_item::{WithPathItem, WithPathItems};
+use crate::ComponentExtensions;
 use axum::body::{Body, HttpBody};
 use axum::extract::connect_info::{Connected, IntoMakeServiceWithConnectInfo};
 use axum::http::Request;
 use axum::response::Response;
 use axum::routing::future::RouteFuture;
 use axum::routing::IntoMakeService;
-use okapi::openapi3::PathItem;
+use okapi::openapi3::{Components, PathItem};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::task::{Context, Poll};
@@ -15,6 +16,7 @@ use tower_service::Service;
 pub struct Router<B = Body> {
     router: axum::Router<B>,
     paths: HashMap<String, PathItem>,
+    components: Components,
 }
 
 impl<B: HttpBody + Send + 'static> Default for Router<B> {
@@ -42,8 +44,8 @@ impl<B> WithPathItems for Router<B> {
     // FIXME: Don't expose internal HashMap type
     type PathItems = HashMap<String, PathItem>;
 
-    fn split(self) -> (Self::Type, Self::PathItems) {
-        (self.router, self.paths)
+    fn split(self) -> (Self::Type, Self::PathItems, Components) {
+        (self.router, self.paths, self.components)
     }
 }
 
@@ -55,6 +57,7 @@ where
         Self {
             router: axum::Router::new(),
             paths: Default::default(),
+            components: Default::default(),
         }
     }
 
@@ -65,9 +68,10 @@ where
             Service<Request<B>, Response = Response, Error = Infallible> + Clone + Send + 'static,
         <T::Type as Service<Request<B>>>::Future: Send + 'static,
     {
-        let (service, path_item) = service.split();
+        let (service, path_item, mut components) = service.split();
         self.router = self.router.route(path, service);
         self.paths.insert(path.to_owned(), path_item);
+        self.components.append(&mut components);
 
         self
     }
@@ -79,9 +83,10 @@ where
             Service<Request<B>, Response = Response, Error = Infallible> + Clone + Send + 'static,
         <T::Type as Service<Request<B>>>::Future: Send + 'static,
     {
-        let (service, path_items) = svc.split();
+        let (service, path_items, mut components) = svc.split();
 
         self.router = self.router.nest(path, service);
+        self.components.append(&mut components);
 
         for (nested_path, path_item) in path_items {
             let new_path = format!("{path}/{nested_path}");
@@ -120,9 +125,10 @@ where
             Service<Request<B>, Response = Response, Error = Infallible> + Clone + Send + 'static,
         <T::Type as Service<Request<B>>>::Future: Send + 'static,
     {
-        let (service, path_items) = svc.split();
+        let (service, path_items, mut components) = svc.split();
 
         self.router = self.router.fallback(service);
+        self.components.append(&mut components);
         for (path, path_item) in path_items {
             assert!(
                 self.paths.insert(path.clone(), path_item).is_none(),

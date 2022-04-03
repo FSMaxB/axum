@@ -1,5 +1,5 @@
-use okapi::openapi3::Responses;
+use okapi::openapi3::{Components, Responses};
 
 pub trait ToResponses {
-    fn to_responses() -> Responses;
+    fn to_responses() -> (Responses, Components);
 }

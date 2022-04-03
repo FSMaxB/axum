@@ -1,5 +1,6 @@
 use crate::with_operation::WithOperation;
 use crate::with_path_item::WithPathItem;
+use crate::ComponentExtensions;
 use axum::body::{Body, Bytes, HttpBody};
 use axum::handler::Handler;
 use axum::http::Request;
@@ -7,7 +8,7 @@ use axum::response::Response;
 use axum::routing::future::RouteFuture;
 use axum::routing::MethodFilter;
 use axum::BoxError;
-use okapi::openapi3::{Operation, PathItem};
+use okapi::openapi3::{Components, Operation, PathItem};
 use std::convert::Infallible;
 use std::task::{Context, Poll};
 use tower_service::Service;
@@ -21,8 +22,9 @@ pub struct MethodRouter<B = Body, E = Infallible> {
 impl<B, E> WithPathItem for MethodRouter<B, E> {
     type Type = axum::routing::MethodRouter<B, E>;
 
-    fn split(self) -> (Self::Type, PathItem) {
-        (self.method_router, self.method_operations.into())
+    fn split(self) -> (Self::Type, PathItem, Components) {
+        let ((), path_item, components) = self.method_operations.split();
+        (self.method_router, path_item, components)
     }
 }
 
@@ -36,10 +38,13 @@ struct MethodOperations {
     post: Option<Operation>,
     put: Option<Operation>,
     trace: Option<Operation>,
+    components: Components,
 }
 
-impl From<MethodOperations> for PathItem {
-    fn from(method_operations: MethodOperations) -> Self {
+impl WithPathItem for MethodOperations {
+    type Type = ();
+
+    fn split(self) -> ((), PathItem, Components) {
         let MethodOperations {
             get,
             head,
@@ -49,9 +54,10 @@ impl From<MethodOperations> for PathItem {
             post,
             put,
             trace,
-        } = method_operations;
+            components,
+        } = self;
 
-        Self {
+        let path_item = PathItem {
             get,
             put,
             post,
@@ -61,7 +67,9 @@ impl From<MethodOperations> for PathItem {
             patch,
             trace,
             ..Default::default()
-        }
+        };
+
+        ((), path_item, components)
     }
 }
 
@@ -125,10 +133,11 @@ macro_rules! operation {
             H::Type: Handler<T, B>,
             T: 'static,
         {
-            let (handler, operation) = handler.split();
+            let (handler, operation, mut components) = handler.split();
 
             self.method_operations.$method = Some(operation);
             self.method_router = self.method_router.$method(handler);
+            self.method_operations.components.append(&mut components);
             self
         }
     };
@@ -141,7 +150,7 @@ where
     B: Send + 'static,
     T: 'static,
 {
-    let (handler, operation) = handler.split();
+    let (handler, operation, components) = handler.split();
 
     MethodRouter {
         method_router: axum::routing::any(handler),
@@ -154,6 +163,7 @@ where
             post: Some(operation.clone()),
             put: Some(operation.clone()),
             trace: Some(operation),
+            components,
         },
     }
 }
@@ -196,7 +206,7 @@ where
         H::Type: Handler<T, B>,
         T: 'static,
     {
-        let (handler, operation) = handler.split();
+        let (handler, operation, mut components) = handler.split();
 
         if filter.contains(MethodFilter::GET) {
             self.method_operations.get = Some(operation.clone());
@@ -224,6 +234,7 @@ where
         }
 
         self.method_router = self.method_router.on(filter, handler);
+        self.method_operations.components.append(&mut components);
         self
     }
 }
@@ -259,10 +270,11 @@ macro_rules! service_operation {
             ResBody: HttpBody<Data = Bytes> + Send + 'static,
             ResBody::Error: Into<BoxError>,
         {
-            let (service, operation) = svc.split();
+            let (service, operation, mut components) = svc.split();
 
             self.method_operations.$method = Some(operation);
             self.method_router = self.method_router.$method_service(service);
+            self.method_operations.components.append(&mut components);
             self
         }
     };
@@ -325,7 +337,7 @@ impl<ReqBody, E> MethodRouter<ReqBody, E> {
         ResBody: HttpBody<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<BoxError>,
     {
-        let (service, operation) = svc.split();
+        let (service, operation, mut components) = svc.split();
 
         if filter.contains(MethodFilter::GET) {
             self.method_operations.get = Some(operation.clone());
@@ -353,6 +365,7 @@ impl<ReqBody, E> MethodRouter<ReqBody, E> {
         }
 
         self.method_router = self.method_router.on_service(filter, service);
+        self.method_operations.components.append(&mut components);
         self
     }
 
@@ -367,7 +380,7 @@ impl<ReqBody, E> MethodRouter<ReqBody, E> {
         ResBody: HttpBody<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<BoxError>,
     {
-        let (service, operation) = svc.split();
+        let (service, operation, mut components) = svc.split();
 
         if self.method_operations.get.is_none() {
             self.method_operations.get = Some(operation.clone());
@@ -395,6 +408,7 @@ impl<ReqBody, E> MethodRouter<ReqBody, E> {
         }
 
         self.method_router = self.method_router.fallback(service);
+        self.method_operations.components.append(&mut components);
         self
     }
 
@@ -415,6 +429,7 @@ impl<ReqBody, E> MethodRouter<ReqBody, E> {
                     head: our_head,
                     patch: our_patch,
                     trace: our_trace,
+                    components: our_components,
                 },
         } = self;
         let Self {
@@ -429,6 +444,7 @@ impl<ReqBody, E> MethodRouter<ReqBody, E> {
                     head: other_head,
                     patch: other_patch,
                     trace: other_trace,
+                    components: other_components,
                 },
         } = other;
 
@@ -444,6 +460,7 @@ impl<ReqBody, E> MethodRouter<ReqBody, E> {
                 head: our_head.or(other_head),
                 patch: our_patch.or(other_patch),
                 trace: our_trace.or(other_trace),
+                components: our_components.merge(other_components),
             },
         }
     }

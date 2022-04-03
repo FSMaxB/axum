@@ -1,7 +1,7 @@
-use okapi::openapi3::Operation;
+use okapi::openapi3::{Components, Operation};
 
 pub trait WithOperation {
     type Type;
 
-    fn split(self) -> (Self::Type, Operation);
+    fn split(self) -> (Self::Type, Operation, Components);
 }
