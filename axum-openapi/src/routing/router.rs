@@ -6,7 +6,7 @@ use axum::http::Request;
 use axum::response::Response;
 use axum::routing::future::RouteFuture;
 use axum::routing::IntoMakeService;
-use okapi::openapi3::{Components, PathItem};
+use okapi::openapi3::{Components, Info, OpenApi, PathItem};
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::task::{Context, Poll};
@@ -59,6 +59,18 @@ where
             paths: Default::default(),
             components: Default::default(),
         }
+    }
+
+    pub fn into_router_and_spec(self, info: Info) -> (axum::Router<B>, OpenApi) {
+        let (router, path_items, components) = self.split();
+        let spec = OpenApi {
+            openapi: OpenApi::default_version(),
+            info,
+            paths: path_items.into_iter().collect(),
+            components: Some(components),
+            ..Default::default()
+        };
+        (router, spec)
     }
 
     pub fn route<T>(mut self, path: &str, service: T) -> Self
