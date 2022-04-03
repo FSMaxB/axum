@@ -4,5 +4,6 @@ members = [
     "axum-core",
     "axum-extra",
     "axum-macros",
+    "axum-openapi",
     "examples/*",
 ]
