@@ -115,7 +115,7 @@ macro_rules! top_level_operation {
     ($method:ident) => {
         pub fn $method<H, T, B>(handler: H) -> MethodRouter<B, Infallible>
         where
-            H: WithOperation,
+            H: WithOperation<T>,
             H::Type: Handler<T, B>,
             B: Send + 'static,
             T: 'static,
@@ -129,7 +129,7 @@ macro_rules! operation {
     ($method:ident) => {
         pub fn $method<H, T>(mut self, handler: H) -> Self
         where
-            H: WithOperation,
+            H: WithOperation<T>,
             H::Type: Handler<T, B>,
             T: 'static,
         {
@@ -145,7 +145,7 @@ macro_rules! operation {
 
 pub fn any<H, T, B>(handler: H) -> MethodRouter<B, Infallible>
 where
-    H: WithOperation,
+    H: WithOperation<T>,
     H::Type: Handler<T, B>,
     B: Send + 'static,
     T: 'static,
@@ -170,7 +170,7 @@ where
 
 pub fn on<H, T, B>(filter: MethodFilter, handler: H) -> MethodRouter<B, Infallible>
 where
-    H: WithOperation,
+    H: WithOperation<T>,
     H::Type: Handler<T, B>,
     B: Send + 'static,
     T: 'static,
@@ -202,7 +202,7 @@ where
 
     pub fn on<H, T>(mut self, filter: MethodFilter, handler: H) -> Self
     where
-        H: WithOperation,
+        H: WithOperation<T>,
         H::Type: Handler<T, B>,
         T: 'static,
     {
@@ -241,11 +241,11 @@ where
 
 macro_rules! top_level_service_operation {
     ($method:ident, $method_service:ident) => {
-        pub fn $method_service<S, ReqBody, ResBody>(
+        pub fn $method_service<S, ReqBody, ResBody, O>(
             svc: S,
         ) -> MethodRouter<ReqBody, <S::Type as Service<Request<ReqBody>>>::Error>
         where
-            S: WithOperation,
+            S: WithOperation<O>,
             S::Type:
                 Service<Request<ReqBody>, Response = Response<ResBody>> + Clone + Send + 'static,
             <S::Type as Service<Request<ReqBody>>>::Future: Send + 'static,
@@ -259,9 +259,9 @@ macro_rules! top_level_service_operation {
 
 macro_rules! service_operation {
     ($method:ident, $method_service:ident) => {
-        pub fn $method_service<S, ResBody>(mut self, svc: S) -> Self
+        pub fn $method_service<S, ResBody, O>(mut self, svc: S) -> Self
         where
-            S: WithOperation,
+            S: WithOperation<O>,
             S::Type: Service<Request<ReqBody>, Response = Response<ResBody>, Error = E>
                 + Clone
                 + Send
@@ -280,11 +280,11 @@ macro_rules! service_operation {
     };
 }
 
-pub fn any_service<S, ReqBody, ResBody>(
+pub fn any_service<S, ReqBody, ResBody, O>(
     svc: S,
 ) -> MethodRouter<ReqBody, <S::Type as Service<Request<ReqBody>>>::Error>
 where
-    S: WithOperation,
+    S: WithOperation<O>,
     S::Type: Service<Request<ReqBody>, Response = Response<ResBody>> + Clone + Send + 'static,
     <S::Type as Service<Request<ReqBody>>>::Future: Send + 'static,
     ResBody: HttpBody<Data = Bytes> + Send + 'static,
@@ -293,12 +293,12 @@ where
     MethodRouter::new().fallback(svc)
 }
 
-pub fn on_service<S, ReqBody, ResBody>(
+pub fn on_service<S, ReqBody, ResBody, O>(
     filter: MethodFilter,
     svc: S,
 ) -> MethodRouter<ReqBody, <S::Type as Service<Request<ReqBody>>>::Error>
 where
-    S: WithOperation,
+    S: WithOperation<O>,
     S::Type: Service<Request<ReqBody>, Response = Response<ResBody>> + Clone + Send + 'static,
     <S::Type as Service<Request<ReqBody>>>::Future: Send + 'static,
     ResBody: HttpBody<Data = Bytes> + Send + 'static,
@@ -326,9 +326,9 @@ impl<ReqBody, E> MethodRouter<ReqBody, E> {
     service_operation!(put, put_service);
     service_operation!(trace, trace_service);
 
-    pub fn on_service<S, ResBody>(mut self, filter: MethodFilter, svc: S) -> Self
+    pub fn on_service<S, ResBody, O>(mut self, filter: MethodFilter, svc: S) -> Self
     where
-        S: WithOperation,
+        S: WithOperation<O>,
         S::Type: Service<Request<ReqBody>, Response = Response<ResBody>, Error = E>
             + Clone
             + Send
@@ -369,9 +369,9 @@ impl<ReqBody, E> MethodRouter<ReqBody, E> {
         self
     }
 
-    pub fn fallback<S, ResBody>(mut self, svc: S) -> Self
+    pub fn fallback<S, ResBody, O>(mut self, svc: S) -> Self
     where
-        S: WithOperation,
+        S: WithOperation<O>,
         S::Type: Service<Request<ReqBody>, Response = Response<ResBody>, Error = E>
             + Clone
             + Send

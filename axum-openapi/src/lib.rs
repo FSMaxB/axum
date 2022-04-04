@@ -3,6 +3,7 @@ use okapi::openapi3::Components;
 #[macro_use]
 pub(crate) mod macros;
 pub mod routing;
+pub mod to_parameters;
 pub mod to_responses;
 pub mod with_operation;
 pub mod with_path_item;
